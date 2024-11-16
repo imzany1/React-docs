@@ -1,0 +1,8 @@
+  /* // h1.module.css */
+
+h1::before{
+    content: "Welcome ";
+    text-align: center;
+    /* margin: 0 auto; */
+    text-wrap:  nowrap;
+}
