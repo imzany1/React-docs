@@ -1,44 +1,142 @@
-import React from "react";
-import { FaRegFileAlt } from "react-icons/fa";
-import { LuDownload } from "react-icons/lu";
-import { IoClose } from "react-icons/io5";
-import { motion } from "framer-motion";
+import { motion, useMotionValue } from 'framer-motion'
 
-function card({ data, reference }) {
+function Card({
+  note,
+  index,
+  boardRef,
+  palette,
+  onBringToFront,
+  onUpdate,
+  onDelete,
+  onMove,
+  onTogglePin,
+  onColorChange,
+}) {
+  const tone = palette.find((entry) => entry.key === note.colorKey) || palette[0]
+  const stopDrag = (event) => event.stopPropagation()
+  const motionX = useMotionValue(0)
+  const motionY = useMotionValue(0)
+
+  const commitDraggedPosition = () => {
+    const offsetX = motionX.get()
+    const offsetY = motionY.get()
+
+    if (Math.abs(offsetX) < 0.5 && Math.abs(offsetY) < 0.5) {
+      return
+    }
+
+    onMove(note.id, offsetX, offsetY)
+    motionX.set(0)
+    motionY.set(0)
+  }
+
   return (
-    <motion.div
-      drag
-      dragConstraints={reference}
-      whileDrag={{ scale: 1.1 }}
-      dragElastic={1}
-      dragTransition={{ bounceStiffness: 100, bounceDamping: 10 }}
-      className="relative flex-shrink-0 w-60 h-72 rounded-[45px] bg-zinc-900/90 text-white px-8 py-10 overflow-hidden "
+    <motion.article
+      drag={!note.pinned}
+      dragConstraints={boardRef}
+      dragMomentum={true}
+      dragElastic={0.28}
+      dragTransition={{
+        power: 0.12,
+        timeConstant: 220,
+        bounceStiffness: 420,
+        bounceDamping: 28,
+      }}
+      whileDrag={{ scale: 1.03, rotate: note.pinned ? 0 : -1.2 }}
+      whileHover={{
+        scale: 1.03,
+        rotate: note.pinned ? 0 : -1.6,
+        boxShadow: `0 22px 28px ${tone.shadow}`,
+      }}
+      onPointerDown={() => onBringToFront(note.id)}
+      onDragTransitionEnd={commitDraggedPosition}
+      initial={{ opacity: 0, scale: 0.96 }}
+      animate={{
+        opacity: 1,
+        rotate: note.pinned ? 0 : [0, -0.4, 0],
+      }}
+      transition={{
+        opacity: { duration: 0.2, delay: index * 0.05 },
+        rotate: {
+          duration: 5.4 + (index % 4) * 0.6,
+          repeat: Infinity,
+          ease: 'easeInOut',
+        },
+        scale: { type: 'spring', stiffness: 260, damping: 18 },
+      }}
+      className={`note-card ${note.pinned ? 'is-pinned' : ''}`}
+      style={{
+        left: note.x,
+        top: note.y,
+        zIndex: note.z,
+        x: motionX,
+        y: motionY,
+        '--note-bg': tone.surface,
+        '--note-border': tone.border,
+        '--note-accent': tone.accent,
+        '--note-shadow': tone.shadow,
+        '--note-tape': tone.tape,
+      }}
     >
-      <FaRegFileAlt />
-      <p className="text-sm leading-tight mt-5 font-semibold">{data.Desc}</p>
-      <div className="footer absolute bottom-0 w-full left-0 ">
-        <div className="flex items-center justify-between py-3 px-8 mb-3">
-          <h5>{data.filesize} </h5>
-          <span className="w-8 h-8 bg-zinc-600 rounded-full flex items-center justify-center">
-            {data.close ? (
-              <IoClose />
-            ) : (
-              <LuDownload size="0.7em" color="#fff" />
-            )}
-          </span>
-        </div>
-        {data.tag.isOpen ? (
-          <div
-            className={`tag w-full py-4 ${
-              data.tag.tagColor === "green" ? "bg-green-600" : "bg-blue-600"
-            } flex items-center justify-center`}
-          >
-            <h3 className="text-sm font-semibold">{data.tag.tagTitle}</h3>
-          </div>
-        ) : null}
+      <div className='note-top'>
+        <button
+          type='button'
+          className='pin-btn'
+          aria-label={note.pinned ? 'Unpin note' : 'Pin note'}
+          onPointerDown={stopDrag}
+          onClick={() => onTogglePin(note.id)}
+        >
+          {note.pinned ? 'Pinned' : 'Pin'}
+        </button>
+
+        <span className='note-meta'>{note.body.length}/600</span>
       </div>
-    </motion.div>
-  );
+
+      <input
+        type='text'
+        className='note-title'
+        value={note.title}
+        maxLength={80}
+        placeholder='Untitled'
+        onPointerDown={stopDrag}
+        onChange={(event) => onUpdate(note.id, { title: event.target.value })}
+      />
+
+      <textarea
+        className='note-body'
+        value={note.body}
+        maxLength={600}
+        placeholder='Write something...'
+        onPointerDown={stopDrag}
+        onChange={(event) => onUpdate(note.id, { body: event.target.value })}
+      />
+
+      <div className='note-footer'>
+        <div className='note-color-row'>
+          {palette.map((entry) => (
+            <button
+              key={entry.key}
+              type='button'
+              className={`note-color-dot ${note.colorKey === entry.key ? 'active' : ''}`}
+              style={{ '--swatch-color': entry.surface }}
+              aria-label={`Set note color to ${entry.label}`}
+              onPointerDown={stopDrag}
+              onClick={() => onColorChange(note.id, entry.key)}
+            />
+          ))}
+        </div>
+
+        <button
+          type='button'
+          className='delete-btn'
+          onPointerDown={stopDrag}
+          onClick={() => onDelete(note.id)}
+        >
+          Delete
+        </button>
+      </div>
+    </motion.article>
+  )
 }
 
-export default card;
+export default Card
