@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Card from './Card'
 
 const STORAGE_KEY = 'hover-notes-v1'
-const NOTE_WIDTH = 260
-const NOTE_HEIGHT = 280
 const BOARD_PADDING = 10
+const DESKTOP_NOTE_SIZE = { width: 260, height: 280 }
+const MOBILE_NOTE_SIZE = { width: 208, height: 222 }
 
 const NOTE_PALETTE = [
   {
@@ -142,7 +142,27 @@ function Foreground() {
   const [notes, setNotes] = useState(() => readNotesFromStorage())
   const [query, setQuery] = useState('')
   const [selectedTone, setSelectedTone] = useState(NOTE_PALETTE[0].key)
+  const [isCoarsePointer, setIsCoarsePointer] = useState(false)
   const zCounterRef = useRef(Math.max(...notes.map((note) => note.z || 1), 1) + 1)
+  const noteSize = isCoarsePointer ? MOBILE_NOTE_SIZE : DESKTOP_NOTE_SIZE
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) {
+      return
+    }
+
+    const media = window.matchMedia('(pointer: coarse)')
+    const syncPointerMode = () => setIsCoarsePointer(media.matches)
+
+    syncPointerMode()
+    if (media.addEventListener) {
+      media.addEventListener('change', syncPointerMode)
+      return () => media.removeEventListener('change', syncPointerMode)
+    }
+
+    media.addListener(syncPointerMode)
+    return () => media.removeListener(syncPointerMode)
+  }, [])
 
   const clampToBoard = useCallback((x, y) => {
     const boardRect = boardRef.current?.getBoundingClientRect()
@@ -155,8 +175,8 @@ function Foreground() {
 
     const allowedWidth = Math.max(120, boardRect.width - BOARD_PADDING * 2)
     const allowedHeight = Math.max(120, boardRect.height - BOARD_PADDING * 2)
-    const noteWidth = Math.min(NOTE_WIDTH, allowedWidth)
-    const noteHeight = Math.min(NOTE_HEIGHT, allowedHeight)
+    const noteWidth = Math.min(noteSize.width, allowedWidth)
+    const noteHeight = Math.min(noteSize.height, allowedHeight)
     const maxX = Math.max(BOARD_PADDING, boardRect.width - noteWidth - BOARD_PADDING)
     const maxY = Math.max(BOARD_PADDING, boardRect.height - noteHeight - BOARD_PADDING)
 
@@ -164,7 +184,7 @@ function Foreground() {
       x: Math.min(maxX, Math.max(BOARD_PADDING, x)),
       y: Math.min(maxY, Math.max(BOARD_PADDING, y)),
     }
-  }, [])
+  }, [noteSize.height, noteSize.width])
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -197,7 +217,9 @@ function Foreground() {
     setQuery('')
     setNotes((current) => {
       const indexSeed = current.length
-      const start = clampToBoard(24 + (indexSeed % 5) * 40, 24 + (indexSeed % 4) * 46)
+      const stepX = isCoarsePointer ? 22 : 40
+      const stepY = isCoarsePointer ? 28 : 46
+      const start = clampToBoard(16 + (indexSeed % 5) * stepX, 18 + (indexSeed % 6) * stepY)
 
       return [
         ...current,
@@ -214,7 +236,7 @@ function Foreground() {
         },
       ]
     })
-  }, [clampToBoard, selectedTone])
+  }, [clampToBoard, isCoarsePointer, selectedTone])
 
   const updateNote = useCallback((noteId, updates) => {
     setNotes((current) =>
@@ -355,6 +377,7 @@ function Foreground() {
                 note={note}
                 index={index}
                 palette={NOTE_PALETTE}
+                noteSize={noteSize}
                 boardRef={boardRef}
                 onBringToFront={bringToFront}
                 onUpdate={updateNote}

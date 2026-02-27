@@ -1,10 +1,12 @@
-import { motion, useMotionValue } from 'framer-motion'
+import { useEffect, useState } from 'react'
+import { motion, useDragControls, useMotionValue } from 'framer-motion'
 
 function Card({
   note,
   index,
   boardRef,
   palette,
+  noteSize,
   onBringToFront,
   onUpdate,
   onDelete,
@@ -13,9 +15,32 @@ function Card({
   onColorChange,
 }) {
   const tone = palette.find((entry) => entry.key === note.colorKey) || palette[0]
-  const stopDrag = (event) => event.stopPropagation()
+  const focusNoteControl = (event) => {
+    event.stopPropagation()
+    onBringToFront(note.id)
+  }
+  const dragControls = useDragControls()
   const motionX = useMotionValue(0)
   const motionY = useMotionValue(0)
+  const [isCoarsePointer, setIsCoarsePointer] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) {
+      return
+    }
+
+    const media = window.matchMedia('(pointer: coarse)')
+    const syncPointerMode = () => setIsCoarsePointer(media.matches)
+
+    syncPointerMode()
+    if (media.addEventListener) {
+      media.addEventListener('change', syncPointerMode)
+      return () => media.removeEventListener('change', syncPointerMode)
+    }
+
+    media.addListener(syncPointerMode)
+    return () => media.removeListener(syncPointerMode)
+  }, [])
 
   const commitDraggedPosition = () => {
     const offsetX = motionX.get()
@@ -30,9 +55,22 @@ function Card({
     motionY.set(0)
   }
 
+  const startDragFromHandle = (event) => {
+    if (note.pinned || !isCoarsePointer) {
+      return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+    onBringToFront(note.id)
+    dragControls.start(event, { snapToCursor: false })
+  }
+
   return (
     <motion.article
       drag={!note.pinned}
+      dragListener={!isCoarsePointer}
+      dragControls={dragControls}
       dragConstraints={boardRef}
       dragMomentum={true}
       dragElastic={0.28}
@@ -68,6 +106,8 @@ function Card({
       style={{
         left: note.x,
         top: note.y,
+        width: noteSize.width,
+        height: noteSize.height,
         zIndex: note.z,
         x: motionX,
         y: motionY,
@@ -79,15 +119,29 @@ function Card({
       }}
     >
       <div className='note-top'>
-        <button
-          type='button'
-          className='pin-btn'
-          aria-label={note.pinned ? 'Unpin note' : 'Pin note'}
-          onPointerDown={stopDrag}
-          onClick={() => onTogglePin(note.id)}
-        >
-          {note.pinned ? 'Pinned' : 'Pin'}
-        </button>
+        <div className='note-controls'>
+          {isCoarsePointer ? (
+            <button
+              type='button'
+              className={`drag-handle ${note.pinned ? 'is-disabled' : ''}`}
+              aria-label={note.pinned ? 'Pinned notes are locked' : 'Drag note'}
+              onPointerDown={startDragFromHandle}
+              disabled={note.pinned}
+            >
+              {note.pinned ? 'Locked' : 'Drag'}
+            </button>
+          ) : null}
+
+          <button
+            type='button'
+            className='pin-btn'
+            aria-label={note.pinned ? 'Unpin note' : 'Pin note'}
+            onPointerDown={focusNoteControl}
+            onClick={() => onTogglePin(note.id)}
+          >
+            {note.pinned ? 'Pinned' : 'Pin'}
+          </button>
+        </div>
 
         <span className='note-meta'>{note.body.length}/600</span>
       </div>
@@ -98,7 +152,8 @@ function Card({
         value={note.title}
         maxLength={80}
         placeholder='Untitled'
-        onPointerDown={stopDrag}
+        onPointerDown={focusNoteControl}
+        onFocus={() => onBringToFront(note.id)}
         onChange={(event) => onUpdate(note.id, { title: event.target.value })}
       />
 
@@ -107,7 +162,8 @@ function Card({
         value={note.body}
         maxLength={600}
         placeholder='Write something...'
-        onPointerDown={stopDrag}
+        onPointerDown={focusNoteControl}
+        onFocus={() => onBringToFront(note.id)}
         onChange={(event) => onUpdate(note.id, { body: event.target.value })}
       />
 
@@ -120,7 +176,7 @@ function Card({
               className={`note-color-dot ${note.colorKey === entry.key ? 'active' : ''}`}
               style={{ '--swatch-color': entry.surface }}
               aria-label={`Set note color to ${entry.label}`}
-              onPointerDown={stopDrag}
+              onPointerDown={focusNoteControl}
               onClick={() => onColorChange(note.id, entry.key)}
             />
           ))}
@@ -129,7 +185,7 @@ function Card({
         <button
           type='button'
           className='delete-btn'
-          onPointerDown={stopDrag}
+          onPointerDown={focusNoteControl}
           onClick={() => onDelete(note.id)}
         >
           Delete
